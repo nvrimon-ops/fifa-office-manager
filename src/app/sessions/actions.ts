@@ -10,6 +10,7 @@ export async function createSession(formData: FormData) {
 
   const scheduledTime = formData.get('scheduled_time') as string
   if (!scheduledTime) return { error: 'יש לבחור תאריך ושעה' }
+  if (new Date(scheduledTime) < new Date()) return { error: 'לא ניתן לפתוח סשן בעבר' }
 
   const { error } = await supabase.from('sessions').insert({
     created_by: user.id,

@@ -23,12 +23,13 @@ function Avatar({ profile, size = 8 }: { profile: Pick<Profile, 'id' | 'nickname
   )
 }
 
-export default function Navbar({ user }: { user: Profile }) {
+export default function Navbar({ user, upcomingCount }: { user: Profile; upcomingCount: number }) {
   const pathname = usePathname()
   const router = useRouter()
   const [open, setOpen] = useState(false)
 
   async function logout() {
+    if (!window.confirm('האם אתה בטוח שברצונך להתנתק?')) return
     const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/auth')
@@ -73,6 +74,14 @@ export default function Navbar({ user }: { user: Profile }) {
               <span className="hidden md:block text-sm font-medium">
                 {user.nickname || user.full_name}
               </span>
+              {upcomingCount > 0 && (
+                <span
+                  title="סשנים קרובים"
+                  className="flex h-5 w-5 items-center justify-center rounded-full bg-[#00FF87] text-[10px] font-bold text-black"
+                >
+                  {upcomingCount}
+                </span>
+              )}
             </Link>
             <button
               onClick={logout}

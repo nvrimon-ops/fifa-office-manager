@@ -11,6 +11,7 @@ import type { Profile, Session, SessionRegistration, Game, TrashTalk } from '@/t
 
 function formatDateTime(dateString: string) {
   return new Date(dateString).toLocaleString('he-IL', {
+    timeZone: 'Asia/Jerusalem',
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -303,6 +304,7 @@ export default async function SessionDetailPage({
         <TrashTalkClient
           sessionId={id}
           currentUserId={user.id}
+          currentUserProfile={profilesMap.get(user.id) ?? null}
           initialMessages={messages}
         />
       </div>

@@ -7,6 +7,7 @@ import type { Profile, Session, SessionRegistration } from '@/types/database'
 
 function formatDateTime(dateString: string) {
   return new Date(dateString).toLocaleString('he-IL', {
+    timeZone: 'Asia/Jerusalem',
     weekday: 'short',
     day: 'numeric',
     month: 'numeric',

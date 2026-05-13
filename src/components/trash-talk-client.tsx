@@ -12,14 +12,19 @@ interface MessageWithProfile extends TrashTalk {
 interface Props {
   sessionId: string
   currentUserId: string
+  currentUserProfile: Profile | null
   initialMessages: MessageWithProfile[]
 }
 
 function formatTime(dateString: string) {
-  return new Date(dateString).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+  return new Date(dateString).toLocaleTimeString('he-IL', {
+    timeZone: 'Asia/Jerusalem',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
-export default function TrashTalkClient({ sessionId, currentUserId, initialMessages }: Props) {
+export default function TrashTalkClient({ sessionId, currentUserId, currentUserProfile, initialMessages }: Props) {
   const [messages, setMessages] = useState<MessageWithProfile[]>(initialMessages)
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -34,7 +39,6 @@ export default function TrashTalkClient({ sessionId, currentUserId, initialMessa
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'trash_talk', filter: `session_id=eq.${sessionId}` },
         async payload => {
-          // Fetch profile for new message
           const { data: profile } = await supabase
             .from('profiles')
             .select('*')
@@ -44,9 +48,12 @@ export default function TrashTalkClient({ sessionId, currentUserId, initialMessa
           if (profile) {
             const msg = { ...(payload.new as TrashTalk), profile }
             setMessages(prev => {
-              // Avoid duplicates
-              if (prev.some(m => m.id === msg.id)) return prev
-              return [...prev, msg]
+              // Replace matching optimistic message or skip exact duplicate
+              const withoutOptimistic = prev.filter(m =>
+                !(m.id.startsWith('opt-') && m.user_id === msg.user_id && m.message === msg.message)
+              )
+              if (withoutOptimistic.some(m => m.id === msg.id)) return withoutOptimistic
+              return [...withoutOptimistic, msg]
             })
           }
         }
@@ -66,9 +73,25 @@ export default function TrashTalkClient({ sessionId, currentUserId, initialMessa
     setError(null)
     const msg = text.trim()
     setText('')
+
+    const optimisticId = `opt-${Date.now()}`
+    if (currentUserProfile) {
+      setMessages(prev => [...prev, {
+        id: optimisticId,
+        session_id: sessionId,
+        user_id: currentUserId,
+        message: msg,
+        created_at: new Date().toISOString(),
+        profile: currentUserProfile,
+      }])
+    }
+
     startTransition(async () => {
       const res = await sendTrashTalk(sessionId, msg)
-      if (res?.error) setError(res.error)
+      if (res?.error) {
+        setError(res.error)
+        setMessages(prev => prev.filter(m => m.id !== optimisticId))
+      }
     })
   }
 
@@ -84,12 +107,18 @@ export default function TrashTalkClient({ sessionId, currentUserId, initialMessa
         ) : (
           messages.map(msg => {
             const isMe = msg.user_id === currentUserId
+            const isOptimistic = msg.id.startsWith('opt-')
             return (
-              <div key={msg.id} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''}`}>
+              <div key={msg.id} className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''} ${isOptimistic ? 'opacity-70' : ''}`}>
                 <div className="h-7 w-7 shrink-0 rounded-full bg-[#00FF87]/10 flex items-center justify-center text-[#00FF87] text-xs font-bold">
                   {(msg.profile.nickname || msg.profile.full_name).charAt(0).toUpperCase()}
                 </div>
                 <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
+                  {!isMe && (
+                    <span className="text-xs text-zinc-500 px-1">
+                      {msg.profile.nickname || msg.profile.full_name}
+                    </span>
+                  )}
                   <div
                     className={`rounded-2xl px-3 py-2 text-sm ${
                       isMe
@@ -99,7 +128,7 @@ export default function TrashTalkClient({ sessionId, currentUserId, initialMessa
                   >
                     {msg.message}
                   </div>
-                  <span className="text-xs text-zinc-600">{formatTime(msg.created_at)}</span>
+                  <span suppressHydrationWarning className="text-xs text-zinc-600">{formatTime(msg.created_at)}</span>
                 </div>
               </div>
             )

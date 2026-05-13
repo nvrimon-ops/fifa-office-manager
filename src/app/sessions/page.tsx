@@ -8,6 +8,7 @@ import type { Profile, Session, SessionRegistration } from '@/types/database'
 
 function formatDateTime(dateString: string) {
   return new Date(dateString).toLocaleString('he-IL', {
+    timeZone: 'Asia/Jerusalem',
     weekday: 'short',
     day: 'numeric',
     month: 'numeric',
@@ -150,6 +151,7 @@ export default function SessionsPage() {
               type="datetime-local"
               required
               dir="ltr"
+              min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
               className="w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-4 py-2.5 text-sm text-white outline-none focus:border-[#00FF87]"
             />
           </div>

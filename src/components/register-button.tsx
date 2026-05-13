@@ -51,10 +51,10 @@ export default function RegisterButton({ sessionId, isRegistered, canRegister, c
           disabled={isPending}
           className="w-full rounded-lg bg-[#00FF87] px-3 py-1.5 text-sm font-semibold text-black transition-colors hover:bg-[#00cc6a] disabled:opacity-50"
         >
-          {isPending ? '...' : 'הירשם'}
+          {isPending ? '...' : 'הצטרף לסשן'}
         </button>
       ) : isFull ? (
-        <span className="block text-center text-xs text-zinc-500">מלא</span>
+        <span className="block text-center text-xs text-zinc-500">הסשן מלא</span>
       ) : null}
       {error && <p className="text-xs text-red-400">{error}</p>}
     </div>

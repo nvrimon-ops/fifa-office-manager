@@ -26,12 +26,12 @@ export default function ReportResultForm({ sessionId, allProfiles }: Props) {
     e.preventDefault()
     const s1 = parseInt(score1, 10)
     const s2 = parseInt(score2, 10)
-    if (!t1p1 || !t2p1) {
-      setError('יש לבחור לפחות שחקן אחד לכל קבוצה')
+    if (!t1p1 || !t2p1 || !score1 || !score2) {
+      setError('כל השדות חובה')
       return
     }
     if (isNaN(s1) || isNaN(s2) || s1 < 0 || s2 < 0) {
-      setError('יש להזין תוצאות תקינות')
+      setError('כל השדות חובה')
       return
     }
     setError(null)

@@ -100,42 +100,48 @@ export async function reportResultWithPlayers(
   scoreTeam1: number,
   scoreTeam2: number,
 ) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'לא מחובר' }
+  try {
+    if (!team1Player1 || !team2Player1) return { error: 'כל השדות חובה' }
 
-  const { data: existingGame } = await supabase
-    .from('games')
-    .select('id')
-    .eq('session_id', sessionId)
-    .maybeSingle()
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'לא מחובר' }
 
-  if (existingGame) return { error: 'תוצאה כבר דווחה' }
+    const { data: existingGame } = await supabase
+      .from('games')
+      .select('id')
+      .eq('session_id', sessionId)
+      .maybeSingle()
 
-  const { error: gameErr } = await supabase.from('games').insert({
-    session_id: sessionId,
-    team1_player1: team1Player1,
-    team1_player2: team1Player2 || null,
-    team2_player1: team2Player1 || null,
-    team2_player2: team2Player2 || null,
-    score_team1: scoreTeam1,
-    score_team2: scoreTeam2,
-    reported_by: user.id,
-  })
+    if (existingGame) return { error: 'תוצאה כבר דווחה' }
 
-  if (gameErr) return { error: gameErr.message }
+    const { error: gameErr } = await supabase.from('games').insert({
+      session_id: sessionId,
+      team1_player1: team1Player1,
+      team1_player2: team1Player2 || null,
+      team2_player1: team2Player1 || null,
+      team2_player2: team2Player2 || null,
+      score_team1: scoreTeam1,
+      score_team2: scoreTeam2,
+      reported_by: user.id,
+    })
 
-  const { error: sessionErr } = await supabase
-    .from('sessions')
-    .update({ status: 'finished' })
-    .eq('id', sessionId)
+    if (gameErr) return { error: 'שגיאה בשמירת התוצאה, נסה שוב' }
 
-  if (sessionErr) return { error: sessionErr.message }
+    const { error: sessionErr } = await supabase
+      .from('sessions')
+      .update({ status: 'finished' })
+      .eq('id', sessionId)
 
-  revalidatePath(`/sessions/${sessionId}`)
-  revalidatePath('/sessions')
-  revalidatePath('/leaderboard')
-  revalidatePath('/')
+    if (sessionErr) return { error: 'שגיאה בשמירת התוצאה, נסה שוב' }
+
+    revalidatePath(`/sessions/${sessionId}`)
+    revalidatePath('/sessions')
+    revalidatePath('/leaderboard')
+    revalidatePath('/')
+  } catch {
+    return { error: 'שגיאה בשמירת התוצאה, נסה שוב' }
+  }
 }
 
 export async function sendTrashTalk(sessionId: string, message: string) {

@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import TrashTalkClient from '@/components/trash-talk-client'
 import ReportResultForm from '@/components/report-result-form'
 import RealtimeRefresher from '@/components/realtime-refresher'
+import RegisterButton from '@/components/register-button'
+import RetryButton from '@/components/retry-button'
 import { startSession } from './actions'
 import type { Profile, Session, SessionRegistration, Game, TrashTalk } from '@/types/database'
 
@@ -116,30 +118,51 @@ export default async function SessionDetailPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth')
 
-  const [
-    { data: session },
-    { data: rawRegs },
-    { data: game },
-    { data: rawMessages },
-    { data: allProfilesData },
-    { data: currentProfile },
-  ] = await Promise.all([
-    supabase.from('sessions').select('*').eq('id', id).single(),
-    supabase
-      .from('session_registrations')
-      .select('*')
-      .eq('session_id', id)
-      .is('cancelled_at', null)
-      .order('registered_at', { ascending: true }),
-    supabase.from('games').select('*').eq('session_id', id).maybeSingle(),
-    supabase
-      .from('trash_talk')
-      .select('*')
-      .eq('session_id', id)
-      .order('created_at', { ascending: true }),
-    supabase.from('profiles').select('*').order('full_name', { ascending: true }),
-    supabase.from('profiles').select('is_admin').eq('id', user.id).single(),
-  ])
+  let session: Session | null = null
+  let rawRegs: SessionRegistration[] | null = null
+  let game: Game | null = null
+  let rawMessages: TrashTalk[] | null = null
+  let allProfilesData: Profile[] | null = null
+  let currentProfile: { is_admin: boolean } | null = null
+  let fetchError = false
+
+  try {
+    const results = await Promise.all([
+      supabase.from('sessions').select('*').eq('id', id).single(),
+      supabase
+        .from('session_registrations')
+        .select('*')
+        .eq('session_id', id)
+        .is('cancelled_at', null)
+        .order('registered_at', { ascending: true }),
+      supabase.from('games').select('*').eq('session_id', id).maybeSingle(),
+      supabase
+        .from('trash_talk')
+        .select('*')
+        .eq('session_id', id)
+        .order('created_at', { ascending: true }),
+      supabase.from('profiles').select('*').order('full_name', { ascending: true }),
+      supabase.from('profiles').select('is_admin').eq('id', user.id).single(),
+    ])
+    session = results[0].data as Session | null
+    rawRegs = results[1].data as SessionRegistration[] | null
+    game = results[2].data as Game | null
+    rawMessages = results[3].data as TrashTalk[] | null
+    allProfilesData = results[4].data as Profile[] | null
+    currentProfile = results[5].data as { is_admin: boolean } | null
+    if (results[0].error || results[1].error) fetchError = true
+  } catch {
+    fetchError = true
+  }
+
+  if (fetchError && !session) {
+    return (
+      <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-8 text-center">
+        <p className="text-red-400">שגיאת שרת, נסה שוב בעוד רגע</p>
+        <RetryButton />
+      </div>
+    )
+  }
 
   if (!session) notFound()
 
@@ -160,6 +183,33 @@ export default async function SessionDetailPage({
   const isAdmin = currentProfile?.is_admin === true
   const sessionData = session as Session
   const statusInfo = STATUS_LABELS[sessionData.status] ?? STATUS_LABELS.open
+
+  const now = new Date()
+  const fiveMinFromNow = new Date(Date.now() + 5 * 60 * 1000)
+  const isRegistered = regs.some(r => r.user_id === user.id)
+  const isFull = regs.length >= 4
+  const canCancel = isRegistered && sessionData.status === 'open' && new Date(sessionData.scheduled_time) > fiveMinFromNow
+
+  let futureOpenRegs = 0
+  try {
+    const { data: futureOpenSessions } = await supabase
+      .from('sessions')
+      .select('id')
+      .eq('status', 'open')
+      .gt('scheduled_time', now.toISOString())
+    const futureIds = (futureOpenSessions ?? []).map(s => s.id)
+    if (futureIds.length > 0) {
+      const { count } = await supabase
+        .from('session_registrations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .is('cancelled_at', null)
+        .in('session_id', futureIds)
+      futureOpenRegs = count ?? 0
+    }
+  } catch { /* use 0 as fallback */ }
+
+  const canRegister = !isRegistered && !isFull && sessionData.status === 'open' && new Date(sessionData.scheduled_time) > now && futureOpenRegs < 2
 
   return (
     <>
@@ -195,11 +245,22 @@ export default async function SessionDetailPage({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[0, 1, 2, 3].map(i => (
-                <PlayerCard key={i} reg={regs[i] ?? null} isWinnerSlot={regs[i]?.slot_type === 'winner'} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[0, 1, 2, 3].map(i => (
+                  <PlayerCard key={i} reg={regs[i] ?? null} isWinnerSlot={regs[i]?.slot_type === 'winner'} />
+                ))}
+              </div>
+              <div className="mt-4">
+                <RegisterButton
+                  sessionId={id}
+                  isRegistered={isRegistered}
+                  canRegister={canRegister}
+                  canCancel={canCancel}
+                  isFull={isFull}
+                />
+              </div>
+            </>
           )}
         </div>
 
